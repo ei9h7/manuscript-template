@@ -1,0 +1,5 @@
+{
+  "trim": { "preset": "5x8" },
+  "toc": { "enabled": false },
+  "input": { "calloutPattern": "" }
+}

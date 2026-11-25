@@ -1,0 +1,64 @@
+# Builds the book with Manuscript Maker.
+#
+#   • Actions → "Build book" → Run workflow: the PDF and EPUB are attached
+#     to the run as a download.
+#   • Push a tag like v1.0 (or create a release in the GitHub UI): the PDF and
+#     EPUB are also attached to a GitHub Release, so every proof is kept.
+#
+# If the manuscript-maker repo is private, add a fine-grained token with
+# read-only Contents access to it as the secret MANUSCRIPT_MAKER_TOKEN.
+
+name: Build book
+
+on:
+  workflow_dispatch:
+    inputs:
+      manuscript:
+        description: Manuscript file or folder
+        default: manuscript.md
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the book
+        uses: actions/checkout@v4
+        with:
+          path: book
+
+      - name: Check out Manuscript Maker
+        uses: actions/checkout@v4
+        with:
+          repository: ei9h7/manuscript-maker
+          token: ${{ secrets.MANUSCRIPT_MAKER_TOKEN || github.token }}
+          path: tool
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build PDF and EPUB
+        env:
+          MANUSCRIPT: ${{ inputs.manuscript || 'manuscript.md' }}
+        run: |
+          cd tool
+          npm ci --omit=dev
+          name="${GITHUB_REPOSITORY#*/}"
+          node bin/build.mjs "../book/$MANUSCRIPT" --pdf "../out/$name.pdf" --epub "../out/$name.epub"
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: book
+          path: out/
+
+      - name: Attach to a release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" out/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --notes "Built with Manuscript Maker."
